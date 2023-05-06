@@ -256,6 +256,7 @@ class TextEditorModel:
                 self.lines = self.lines[: next_row] + new_lines[1 : len(new_lines)] + self.lines[next_row :]
             else:
                 new_lines[-1] += current_line[current_col :]
+                self.lines[current_row] = self.lines[current_row][:current_col] + new_lines[0]
                 self.lines.extend(new_lines[1:])
 
             self.cursor_location.row = current_row + len(new_lines) - 1
