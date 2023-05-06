@@ -11,6 +11,12 @@ class Location:
 
     def copy(self):
         return Location(self.row, self.col)
+    
+    def __eq__(self, o):
+        if not isinstance(o, Location):
+            return False
+        return self.row == o.row and self.col == o.col
+        
 
 
 class LocationRange:
@@ -84,7 +90,7 @@ class TextEditorModel:
             self.text_observes.remove(obs)
 
     def notify_text_observers(self):
-        for o in self.text_observes:
+        for o in self.text_observers:
             o.notify_text()
 
     #------------------------cursor movement-----------------------------------------
@@ -94,11 +100,18 @@ class TextEditorModel:
         if self.cursor_location.col > 0:
             self.cursor_location.col -= 1
             self.notify_cursor_observers()
+        elif self.cursor_location.row > 0:
+            self.cursor_location.row -= 1
+            self.cursor_location.col = len(self.get_current_line())
+            self.notify_cursor_observers() 
     
     def move_cursor_right(self):
         if self.cursor_location.col < len(self.get_current_line()):
             self.cursor_location.col += 1
             self.notify_cursor_observers()
+        elif self.cursor_location.row < len(self.lines) - 1:
+            self.cursor_location.row += 1
+            self.cursor_location.col = 0
 
     def move_cursor_up(self):
         if self.cursor_location.row > 0:
@@ -114,9 +127,37 @@ class TextEditorModel:
 
     def delete_before(self):
         if self.cursor_location.col == 0:
-            return #don't delete if at the start of the row
+            if self.cursor_location.row == 0:
+                return #don't delete if at the start of the document 
+            else:
+                line = self.get_current_line()
+                row = self.cursor_location.row
+                new_cursor_col = len(self.lines[row-1])
+                self.lines[self.cursor_location.row - 1] += line
+                del self.lines[self.cursor_location.row]
+                self.cursor_location = Location(row - 1, new_cursor_col)
+                self.notify_cursor_observers()
+                self.notify_text_observers()
+
+
+            return
         
+        line = self.get_current_line() 
+        index = self.cursor_location.col - 1
+        line = line[: index] + line[index+1 :]
+
+        row = self.cursor_location.row
+
+        self.lines[row] = line
+        self.move_cursor_left()
+
+        self.notify_text_observers()
+
+    def delete_after(self):
         line = self.get_current_line()
+        if self.cursor_location.col == len(line) - 1:
+            return #don't delete if at the end of the row
+        
         index = self.cursor_location.col
         line = line[: index] + line[index+1 :]
 
@@ -126,19 +167,152 @@ class TextEditorModel:
 
         self.notify_text_observers()
 
-    def delete_after(self):
-        line = self.get_current_line()
-        if self.cursor_location.col == len(line) - 1:
-            return #don't delete if at the end of the row
+    def delete_selection(self):
+        start_row = self.selection_range.start.row
+        start_col = self.selection_range.start.col
+
+        end_row = self.selection_range.end.row
+        end_col = self.selection_range.end.col
+
+        if start_row == end_row:
+            line = self.get_current_line()
+
+            self.lines[start_row] = line[:start_col] + line[end_col :]
+
+        else:
+            start_line = self.lines[start_row]
+            end_line = self.lines[end_row]
+
+            self.lines[start_row] = start_line[: start_col] + end_line[end_col :]
+
+            self.lines[end_row] = end_line[end_col : ]
+
+            self.lines = self.lines[:start_row + 1] + self.lines[end_row + 1 :]
+
+        self.cursor_location.row = start_row
+        self.cursor_location.col = start_col
+
         
-        index = self.cursor_location.col + 1
-        line = line[: index] + line[index+1 :]
 
+        self.notify_cursor_observers()
+        self.notify_text_observers()
+    
+
+    #-----------------------------insert operations----------------------------------------
+
+
+    def insert(self, c):
+            
+            
+        line = self.get_current_line()
         row = self.cursor_location.row
+        col = self.cursor_location.col 
 
-        self.lines[row] = line
+        
+        
+        if ord(c) == 13 or c == '\n':
+            
+            line_old = line[:col]
+            line_new = line[col:]
+
+            self.lines.insert(row + 1, line_new)
+            self.lines[row] = line_old
+
+            self.cursor_location = Location(row + 1, 0)
+            
+
+            print(self.lines)
+
+
+
+        else:
+
+
+            self.lines[row] = line[: col] + c + line[col:]
+            self.move_cursor_right()
+
 
         self.notify_text_observers()
+
+    def insert_string(self, s):
+        new_lines = s.split('\n')
+
+        current_row = self.cursor_location.row
+        current_col = self.cursor_location.col
+        
+        #handles first line
+        current_line = self.get_current_line()
+        if len(new_lines) == 1:
+            self.lines[current_row] = current_line[: current_col] + new_lines[0] + current_line[current_col :]
+            self.cursor_location.col += len(new_lines[0])
+
+        else: 
+            if current_row < len(self.lines) - 1:
+                self.lines[current_row] = current_line[: current_col] + new_lines[0]
+                new_lines[-1] += current_line[current_col :]
+                next_row = current_row + 1
+                #next_line = self.lines[next_row]
+                #self.lines[next_row] = new_lines[-1]
+                self.lines = self.lines[: next_row] + new_lines[1 : len(new_lines)] + self.lines[next_row :]
+            else:
+                new_lines[-1] += current_line[current_col :]
+                self.lines.extend(new_lines[1:])
+
+            self.cursor_location.row = current_row + len(new_lines) - 1
+            self.cursor_location.col = len(new_lines[-1]) - len(current_line[current_col :])
+        
+
+
+        self.notify_cursor_observers()
+        self.notify_text_observers()
+
+#---------------------------getter methods--------------------------
+
+    def get_selection_coords(self):
+        start_row = self.selection_range.start.row
+        start_col = self.selection_range.start.col
+
+        end_row = self.selection_range.end.row
+        end_col = self.selection_range.end.col
+
+        return start_row, start_col, end_row, end_col
+
+    def get_selection_text(self):
+        if self.selection_range == None:
+            return ''
+        
+        start_row, start_col, end_row, end_col = self.get_selection_coords()
+
+        if start_row == end_row:
+            return self.lines[start_row][start_col : end_col]
+        else:
+            first_line = self.lines[start_row][start_col : ]
+            last_line = self.lines[end_row][: end_col]
+
+            lines = self.lines[start_row + 1: end_row - 1]
+
+            return '\n'.join([first_line] + lines + [last_line])
+        
+    def get_char_before(self):
+        if self.cursor_location.col == 0:
+            return '\n'
+        return self.lines[self.cursor_location.row][self.cursor_location.col]
+
+            
+
+        
+
+        
+
+        
+
+
+
+    
+
+            
+
+        
 
     
 
