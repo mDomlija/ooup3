@@ -4,7 +4,8 @@ import textEditorModel
 import ClipboardStack
 import editActions
 import undoManager
-
+import textEditorMenu
+import statusBar
 class TextEditor(tkinter.Frame):
     LINE_HEIGHT = 30
     LEFT_PADDING = 20
@@ -19,6 +20,8 @@ class TextEditor(tkinter.Frame):
         self.selection_ids = []
         self.clipboard = ClipboardStack.ClipboardStack()
         self.undo_manager = undoManager.UndoManager()
+        self.selection_observers = []
+        
 
         tem.attach_cursor_observer(self)
         tem.attach_text_observer(self)
@@ -26,6 +29,18 @@ class TextEditor(tkinter.Frame):
 
         self.draw_ui()
 
+    #-----------------------selection observers----------------------------
+    def attach_selection_observer(self, o):
+        self.selection_observers.append(o)
+
+    def notify_selection_observers(self, status):
+        for o in self.selection_observers:
+            o.update_selection(status)
+
+    #-------------------------------------setters------------------------------------
+    def set_active_selection(self, status):
+        self.has_active_selection = status
+        self.notify_selection_observers(status)
 
     #------------------------------- drawing ----------------------------------------
 
@@ -176,7 +191,8 @@ class TextEditor(tkinter.Frame):
 
 
             else:
-                self.has_active_selection = True
+                self.set_active_selection(True)
+                #self.has_active_selection = True
                 self.selection_direction = direction
                 self.text_editor_model.selection_range = textEditorModel.LocationRange(
                     previous_cursor, self.text_editor_model.cursor_location
@@ -184,7 +200,8 @@ class TextEditor(tkinter.Frame):
             
             self.refresh_selection()
         else:
-            self.has_active_selection = False
+            self.set_active_selection(False)
+            #self.has_active_selection = False
             self.text_editor_model.selection_range = None
             self.refresh_selection()
 
@@ -224,7 +241,8 @@ class TextEditor(tkinter.Frame):
             #self.text_editor_model.delete_selection()
             action.execute_do()
             self.undo_manager.push(action)
-            self.has_active_selection = False
+            self.set_active_selection(False)
+            #self.has_active_selection = False
             self.text_editor_model.selection_range = None
             self.refresh_selection()
         else:
@@ -267,13 +285,24 @@ class TextEditor(tkinter.Frame):
     def ctrl_x_pressed(self, e):
         if self.has_active_selection:
             self.ctrl_c_pressed(e)
-            self.text_editor_model.delete_selection()
-            self.has_active_selection = False
+            action = editActions.deleteSelectionAction(
+                self.text_editor_model.cursor_location,
+                self.text_editor_model.selection_range,
+                self.text_editor_model
+            )
+            action.execute_do()
+            self.undo_manager.push(action)
+            #self.text_editor_model.delete_selection()
+            #self.has_active_selection = False
+            self.set_active_selection(False)
             self.text_editor_model.selection_range = None
             self.refresh_selection()
 
     def ctrl_z_pressed(self, e):
         self.undo_manager.undo()
+
+    def ctrl_y_pressed(self, e):
+        self.undo_manager.redo()
         
         
 
@@ -283,8 +312,13 @@ class TextEditor(tkinter.Frame):
 def main():
 
     root = tkinter.Tk()
+    
     tem = textEditorModel.TextEditorModel('1111\n2222\n3333')
     ex = TextEditor(tem)
+    menubar = textEditorMenu.MenuBar(root, ex)
+    status_bar = statusBar.StatusBar(root, tem)
+    tem.attach_cursor_observer(status_bar)
+
     root.geometry("420x250+300+300")
     root.bind('<Left>', ex.left_key_pressed)
     root.bind('<Right>', ex.right_key_pressed)
@@ -298,10 +332,11 @@ def main():
     root.bind('<Control-v>', ex.ctrl_v_pressed )
     root.bind('<Control-x>', ex.ctrl_x_pressed )
     root.bind('<Control-z>', ex.ctrl_z_pressed )
+    root.bind('<Control-y>', ex.ctrl_y_pressed )
 
     root.bind('<Key>', ex.key_pressed)
 
-    
+    root.config(menu=menubar)
     root.mainloop()
 
 
