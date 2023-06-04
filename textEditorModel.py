@@ -297,7 +297,7 @@ class TextEditorModel:
     def get_char_before(self):
         if self.cursor_location.col == 0:
             return '\n'
-        return self.lines[self.cursor_location.row][self.cursor_location.col]
+        return self.lines[self.cursor_location.row][self.cursor_location.col-1]
 
             
 

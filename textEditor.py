@@ -6,6 +6,10 @@ import editActions
 import undoManager
 import textEditorMenu
 import statusBar
+
+
+
+
 class TextEditor(tkinter.Frame):
     LINE_HEIGHT = 30
     LEFT_PADDING = 20
@@ -313,7 +317,7 @@ def main():
 
     root = tkinter.Tk()
     
-    tem = textEditorModel.TextEditorModel('1111\n2222\n3333')
+    tem = textEditorModel.TextEditorModel('Some text\nto model\nthis notepad')
     ex = TextEditor(tem)
     menubar = textEditorMenu.MenuBar(root, ex)
     status_bar = statusBar.StatusBar(root, tem)

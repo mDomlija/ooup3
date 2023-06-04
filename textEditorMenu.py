@@ -2,6 +2,26 @@
 import tkinter
 import textEditorModel
 import textEditor
+import os
+import importlib.util
+from functools import partial
+
+def find_plugins():
+    plugins = []
+    current_directory = os.getcwd()
+
+# Iterate over all files in the directory
+    for root, dirs, files in os.walk(current_directory):
+        for file in files:
+            if file.endswith('Plugin.py'):
+                file_full = os.path.join(root, file)
+                spec = importlib.util.spec_from_file_location('file', file)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                
+                plugins.append(module.Plugin())
+    
+    return plugins
 
 
 class MenuBar(tkinter.Menu):
@@ -10,6 +30,7 @@ class MenuBar(tkinter.Menu):
         self.file_menu = FileMenu(self)
         self.edit_menu = EditMenu(self, editor)
         self.move_menu = MoveMenu(self)
+        self.plugin_menu = PluginMenu(self, editor)
         editor.attach_selection_observer(self.edit_menu)
         editor.undo_manager.attach_undo_observer(self.edit_menu)
         editor.undo_manager.attach_redo_observer(self.edit_menu)
@@ -17,7 +38,18 @@ class MenuBar(tkinter.Menu):
         self.add_cascade(label="File", menu=self.file_menu)
         self.add_cascade(label="Edit", menu=self.edit_menu)
         self.add_cascade(label="Move", menu=self.move_menu)
+        self.add_cascade(label='Plugin', menu=self.plugin_menu)
     
+
+class PluginMenu(tkinter.Menu):
+    def __init__(self, parent, editor):
+        super().__init__(parent)
+        self.tem = editor.text_editor_model
+
+        for plugin in find_plugins():
+            action_with_arg = partial(plugin.execute, self.tem)
+            self.add_command(label=plugin.get_name(), command=action_with_arg)
+
 
 
 
